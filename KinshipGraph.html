@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinship Chart Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #canvas {
+            touch-action: none;
+            user-select: none;
+            background-color: #1f2937; /* gray-800 */
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            border: 1px solid #4b5563; /* gray-600 */
+            overflow: hidden;
+            position: relative;
+        }
+        .draggable {
+            position: absolute;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            width: 60px;
+            height: 60px;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+        .draggable.selected {
+            outline: 3px solid #34d399; /* emerald-400 */
+            box-shadow: 0 0 15px rgba(52, 211, 153, 0.7);
+        }
+        .shape-male {
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 52px solid #6b7280; /* gray-500 */
+        }
+        .shape-female {
+            width: 52px;
+            height: 52px;
+            background-color: #6b7280; /* gray-500 */
+            border-radius: 50%;
+        }
+        .shape-text {
+            font-size: 36px;
+            color: #9ca3af; /* gray-400 */
+            width: auto;
+            height: auto;
+        }
+        .connector-path {
+            stroke: #9ca3af; /* gray-400 */
+            stroke-width: 2.5;
+            fill: none;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex flex-col h-screen antialiased">
+
+    <!-- Header -->
+    <header class="bg-gray-800 p-3 text-center shadow-lg z-20">
+        <h1 class="text-2xl font-bold text-white">Kinship Chart Builder</h1>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Toolbar -->
+        <aside class="w-64 bg-gray-800 p-4 space-y-6 overflow-y-auto shadow-lg z-10">
+            <div>
+                <h2 class="text-lg font-semibold text-white border-b border-gray-600 pb-2 mb-3">Add Elements</h2>
+                <div class="space-y-2">
+                    <button id="add-male" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add Male (△)</button>
+                    <button id="add-female" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add Female (○)</button>
+                    <button id="add-equals" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Add Equals (=)</button>
+                    <button id="add-line" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Connect (Line)</button>
+                </div>
+            </div>
+            
+            <div id="edit-panel" class="hidden">
+                <h2 class="text-lg font-semibold text-white border-b border-gray-600 pb-2 mb-3">Edit Selected</h2>
+                <div class="space-y-3">
+                    <div>
+                        <label for="number-input" class="block text-sm font-medium text-gray-300">Number / Text</label>
+                        <input type="text" id="number-input" class="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label for="color-input" class="block text-sm font-medium text-gray-300">Element Color</label>
+                        <input type="color" id="color-input" value="#6b7280" class="mt-1 block w-full h-10 bg-gray-700 border border-gray-600 rounded-md cursor-pointer">
+                    </div>
+                    <button id="delete-btn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">Delete Element</button>
+                </div>
+            </div>
+
+            <div>
+                <h2 class="text-lg font-semibold text-white border-b border-gray-600 pb-2 mb-3">Canvas Options</h2>
+                 <div>
+                    <label for="bg-color-input" class="block text-sm font-medium text-gray-300">Canvas Color</label>
+                    <input type="color" id="bg-color-input" value="#1f2937" class="mt-1 block w-full h-10 bg-gray-700 border border-gray-600 rounded-md cursor-pointer">
+                </div>
+            </div>
+
+            <div>
+                <h2 class="text-lg font-semibold text-white border-b border-gray-600 pb-2 mb-3">Export</h2>
+                <div class="space-y-2">
+                    <button id="export-jpeg" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Export as JPEG</button>
+                    <button id="export-pdf" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">Export as PDF</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <main class="flex-1 flex items-center justify-center bg-gray-900 p-4">
+            <div id="canvas-container" class="w-full h-full">
+                <div id="canvas" class="w-full h-full rounded-lg shadow-inner">
+                    <svg id="line-svg" class="w-full h-full absolute top-0 left-0"></svg>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+    // --- SETUP ---
+    const { jsPDF } = window.jspdf;
+    const canvas = document.getElementById('canvas');
+    const lineSvg = document.getElementById('line-svg');
+    const editPanel = document.getElementById('edit-panel');
+    const numberInput = document.getElementById('number-input');
+    const colorInput = document.getElementById('color-input');
+    const bgColorInput = document.getElementById('bg-color-input');
+    
+    let elementCounter = 0;
+    let selectedElement = null;
+    let lineDrawingState = { active: false, startEl: null };
+    let elements = new Map();
+    let lines = new Map();
+
+    // --- ELEMENT CREATION ---
+    function createElement(type) {
+        elementCounter++;
+        const id = `el-${elementCounter}`;
+        const el = document.createElement('div');
+        el.id = id;
+        el.className = 'draggable';
+        el.style.left = `${(elements.size % 5) * 80 + 50}px`;
+        el.style.top = `${Math.floor(elements.size / 5) * 80 + 50}px`;
+        
+        const content = document.createElement('div');
+        const textSpan = document.createElement('span');
+        
+        if (type === 'male') {
+            content.className = 'shape-male';
+            el.dataset.shape = 'triangle';
+        } else if (type === 'female') {
+            content.className = 'shape-female';
+            el.dataset.shape = 'circle';
+        } else { // equals
+            content.className = 'shape-text';
+            content.textContent = '=';
+            el.dataset.shape = 'text';
+        }
+        
+        textSpan.className = 'absolute';
+        if (type !== 'equals') {
+            textSpan.textContent = elementCounter;
+        }
+        
+        el.appendChild(content);
+        el.appendChild(textSpan);
+        canvas.appendChild(el);
+        
+        elements.set(id, { el, lines: new Set() });
+        selectElement(el);
+    }
+
+    // --- SELECTION & EDITING ---
+    function selectElement(el) {
+        if (selectedElement) {
+            selectedElement.classList.remove('selected');
+        }
+        if (el) {
+            selectedElement = el;
+            selectedElement.classList.add('selected');
+            editPanel.classList.remove('hidden');
+            updateEditPanel();
+        } else {
+            selectedElement = null;
+            editPanel.classList.add('hidden');
+        }
+    }
+
+    function updateEditPanel() {
+        if (!selectedElement) return;
+        const shape = selectedElement.dataset.shape;
+        const contentEl = selectedElement.children[0];
+        const textSpan = selectedElement.children[1];
+
+        numberInput.value = textSpan.textContent;
+        
+        if (shape === 'triangle') {
+            colorInput.value = rgbToHex(contentEl.style.borderBottomColor);
+        } else if (shape === 'circle') {
+            colorInput.value = rgbToHex(contentEl.style.backgroundColor);
+        } else { // text
+            colorInput.value = rgbToHex(contentEl.style.color);
+        }
+    }
+
+    function applyChanges() {
+        if (!selectedElement) return;
+        const shape = selectedElement.dataset.shape;
+        const contentEl = selectedElement.children[0];
+        const textSpan = selectedElement.children[1];
+
+        textSpan.textContent = numberInput.value;
+
+        if (shape === 'triangle') {
+            contentEl.style.borderBottomColor = colorInput.value;
+        } else if (shape === 'circle') {
+            contentEl.style.backgroundColor = colorInput.value;
+        } else { // text
+            contentEl.style.color = colorInput.value;
+        }
+    }
+
+    function deleteSelectedElement() {
+        if (!selectedElement) return;
+        const id = selectedElement.id;
+        
+        const elData = elements.get(id);
+        if (elData) {
+            elData.lines.forEach(lineId => {
+                const lineData = lines.get(lineId);
+                if (lineData) {
+                    const otherElId = lineData.start === id ? lineData.end : lineData.start;
+                    const otherElData = elements.get(otherElId);
+                    if (otherElData) {
+                       otherElData.lines.delete(lineId);
+                    }
+                    lineData.path.remove();
+                    lines.delete(lineId);
+                }
+            });
+        }
+        
+        elements.delete(id);
+        selectedElement.remove();
+        selectElement(null);
+    }
+    
+    // --- LINE DRAWING (ORTHOGONAL) ---
+    function startLineDrawing() {
+        lineDrawingState.active = true;
+        canvas.style.cursor = 'crosshair';
+        document.getElementById('add-line').textContent = 'Connecting... (Cancel)';
+    }
+    
+    function stopLineDrawing() {
+        if(lineDrawingState.startEl) {
+            lineDrawingState.startEl.classList.remove('selected');
+        }
+        lineDrawingState = { active: false, startEl: null };
+        canvas.style.cursor = 'default';
+        document.getElementById('add-line').textContent = 'Connect (Line)';
+    }
+
+    function handleLineClick(el) {
+        if (!lineDrawingState.active) return;
+        
+        if (!lineDrawingState.startEl) {
+            lineDrawingState.startEl = el;
+            el.classList.add('selected');
+        } else {
+            if (lineDrawingState.startEl !== el) {
+                createLine(lineDrawingState.startEl.id, el.id);
+            }
+            stopLineDrawing();
+        }
+    }
+
+    function createLine(startId, endId) {
+        const lineId = `line-${startId}-${endId}`;
+        const reverseId = `line-${endId}-${startId}`;
+        if (lines.has(lineId) || lines.has(reverseId)) return;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.id = lineId;
+        path.classList.add('connector-path');
+        lineSvg.appendChild(path);
+
+        lines.set(lineId, { path, start: startId, end: endId });
+        elements.get(startId).lines.add(lineId);
+        elements.get(endId).lines.add(lineId);
+        
+        updateLine(lineId);
+    }
+
+    function updateLine(lineId) {
+        const lineData = lines.get(lineId);
+        if (!lineData) return;
+
+        const startEl = document.getElementById(lineData.start);
+        const endEl = document.getElementById(lineData.end);
+
+        if (!startEl || !endEl) {
+            lineData.path.remove();
+            lines.delete(lineId);
+            return;
+        }
+
+        const canvasRect = canvas.getBoundingClientRect();
+        const startRect = startEl.getBoundingClientRect();
+        const endRect = endEl.getBoundingClientRect();
+
+        const startX = startRect.left - canvasRect.left + startRect.width / 2;
+        const startY = startRect.top - canvasRect.top + startRect.height / 2;
+        const endX = endRect.left - canvasRect.left + endRect.width / 2;
+        const endY = endRect.top - canvasRect.top + endRect.height / 2;
+
+        const midY = (startY + endY) / 2;
+
+        // Create an orthogonal path: Move -> Vertical -> Horizontal -> Vertical -> End
+        const pathData = `M ${startX} ${startY} V ${midY} H ${endX} V ${endY}`;
+        
+        lineData.path.setAttribute('d', pathData);
+    }
+
+    // --- INTERACTJS DRAGGING ---
+    interact('.draggable').draggable({
+        listeners: {
+            move(event) {
+                const target = event.target;
+                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+                
+                const elData = elements.get(target.id);
+                if (elData) {
+                    elData.lines.forEach(lineId => updateLine(lineId));
+                }
+            }
+        },
+        modifiers: [
+            interact.modifiers.restrictRect({ restriction: 'parent' })
+        ],
+        inertia: true
+    });
+
+    // --- EVENT LISTENERS ---
+    document.getElementById('add-male').addEventListener('click', () => createElement('male'));
+    document.getElementById('add-female').addEventListener('click', () => createElement('female'));
+    document.getElementById('add-equals').addEventListener('click', () => createElement('equals'));
+    
+    document.getElementById('add-line').addEventListener('click', () => {
+        if (lineDrawingState.active) {
+            stopLineDrawing();
+        } else {
+            startLineDrawing();
+        }
+    });
+
+    numberInput.addEventListener('input', applyChanges);
+    colorInput.addEventListener('input', applyChanges);
+    bgColorInput.addEventListener('input', (e) => {
+        canvas.style.backgroundColor = e.target.value;
+    });
+    document.getElementById('delete-btn').addEventListener('click', deleteSelectedElement);
+
+    canvas.addEventListener('click', (e) => {
+        const clickedDraggable = e.target.closest('.draggable');
+        if (lineDrawingState.active) {
+            if (clickedDraggable) {
+                handleLineClick(clickedDraggable);
+            }
+        } else {
+            selectElement(clickedDraggable);
+        }
+    });
+
+    // --- EXPORT ---
+    function exportCanvas(format) {
+        selectElement(null); 
+        setTimeout(() => { 
+            const bgColor = canvas.style.backgroundColor;
+            html2canvas(canvas, { backgroundColor: bgColor }).then(canvasImage => {
+                if (format === 'jpeg') {
+                    const link = document.createElement('a');
+                    link.download = 'kinship-chart.jpg';
+                    link.href = canvasImage.toDataURL('image/jpeg', 0.9);
+                    link.click();
+                } else if (format === 'pdf') {
+                    const imgData = canvasImage.toDataURL('image/png');
+                    const pdf = new jsPDF({
+                        orientation: canvasImage.width > canvasImage.height ? 'landscape' : 'portrait',
+                        unit: 'px',
+                        format: [canvasImage.width, canvasImage.height]
+                    });
+                    pdf.addImage(imgData, 'PNG', 0, 0, canvasImage.width, canvasImage.height);
+                    pdf.save('kinship-chart.pdf');
+                }
+            });
+        }, 100);
+    }
+
+    document.getElementById('export-jpeg').addEventListener('click', () => exportCanvas('jpeg'));
+    document.getElementById('export-pdf').addEventListener('click', () => exportCanvas('pdf'));
+    
+    // --- UTILITY ---
+    function rgbToHex(rgb) {
+        if (!rgb || !rgb.startsWith('rgb')) return '#6b7280'; // default color
+        let [r, g, b] = rgb.match(/\d+/g).map(Number);
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+    }
+
+    </script>
+</body>
+</html>
